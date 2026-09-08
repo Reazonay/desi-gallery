@@ -1,14 +1,18 @@
 import { NextResponse } from "next/server";
 import { put } from "@vercel/blob";
 
+export const maxDuration = 30; // seconds
+
 export async function POST(request: Request): Promise<NextResponse> {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
 
   try {
     const formData = await request.formData();
-    const files = formData.getAll("files") as File[];
+    // Support both single file and multiple files in form data
+    const rawFiles = formData.getAll("file").concat(formData.getAll("files")) as File[];
+    const files = rawFiles.filter((f) => f && f.size > 0);
 
-    if (!files || files.length === 0) {
+    if (files.length === 0) {
       return NextResponse.json(
         { error: "Моля, изберете поне една снимка за качване." },
         { status: 400 }
@@ -16,9 +20,10 @@ export async function POST(request: Request): Promise<NextResponse> {
     }
 
     if (!token) {
-      // Local development message when Blob is not yet linked
+      // Message when Blob storage is not connected yet
       return NextResponse.json({
-        warning: "Vercel Blob токенът не е конфигуриран локално. Във Vercel качването ще работи автоматично след активиране на Vercel Blob.",
+        warning:
+          "Vercel Blob хранилището все още не е активирано във Vercel. След като натиснете 'Create Blob' във Vercel Storage, снимките ще се пазят завинаги.",
         success: true,
         demo: true,
       });
@@ -27,16 +32,20 @@ export async function POST(request: Request): Promise<NextResponse> {
     const uploaded = [];
 
     for (const file of files) {
-      if (file.size === 0) continue;
-      // Keep safe filename
+      // Clean safe filename
       const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
-      const filename = `photos/${Date.now()}-${cleanName}`;
+      const filename = `wedding/${Date.now()}-${cleanName}`;
 
       const blob = await put(filename, file, {
         access: "public",
         addRandomSuffix: true,
       });
-      uploaded.push(blob);
+      uploaded.push({
+        url: blob.url,
+        pathname: blob.pathname,
+        size: file.size,
+        downloadUrl: blob.downloadUrl || blob.url,
+      });
     }
 
     return NextResponse.json({ success: true, uploaded });
