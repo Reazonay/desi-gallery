@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
-import { Download, ChevronLeft, ChevronRight, X, Loader2, RefreshCw, Check, Share2, Info } from "lucide-react";
+import { Download, ChevronLeft, ChevronRight, X, Loader2, RefreshCw, Check, Info, ArrowLeftRight } from "lucide-react";
 
 export interface PhotoItem {
   url: string;
@@ -67,8 +67,8 @@ export default function GalleryView({
     const deltaX = e.changedTouches[0].clientX - touchStartX.current;
     const deltaY = e.changedTouches[0].clientY - touchStartY.current;
 
-    // Only swipe if horizontal movement is significantly greater than vertical scroll
-    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
+    // Swipe left/right
+    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
       if (deltaX < 0) {
         setSelectedIndex((prev) =>
           prev !== null && prev < photos.length - 1 ? prev + 1 : 0
@@ -83,7 +83,7 @@ export default function GalleryView({
     touchStartY.current = null;
   };
 
-  // Dedicated save directly to iPhone / Android Photos
+  // Direct save to iPhone & Android Photos
   const handleSaveToPhotos = async (photo: PhotoItem) => {
     setIsDownloading(true);
     const filename = photo.pathname?.split("/").pop() || `svatba-${Date.now()}.jpg`;
@@ -92,25 +92,9 @@ export default function GalleryView({
       const targetUrl = photo.downloadUrl || photo.url;
       const res = await fetch(targetUrl);
       const blob = await res.blob();
-      const file = new File([blob], filename, { type: "image/jpeg" });
+      const file = new File([blob], filename, { type: blob.type || "image/jpeg" });
 
-      // If Web Share API with files is available (iPhone Safari / Android)
-      if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [file] })) {
-        setShowSaveTip(true);
-        await navigator.share({
-          files: [file],
-          title: "Сватбена снимка",
-        });
-        setDownloadSuccess(true);
-        setTimeout(() => {
-          setDownloadSuccess(false);
-          setShowSaveTip(false);
-        }, 3500);
-        setIsDownloading(false);
-        return;
-      }
-
-      // Fallback for desktop: browser download
+      // 1. Direct download (Immediately saves to Android Gallery / Downloads folder & Desktop)
       const objectUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -120,12 +104,26 @@ export default function GalleryView({
       document.body.removeChild(link);
       window.URL.revokeObjectURL(objectUrl);
 
+      // 2. On iPhone, invoke Web Share so user can tap "Save Image" (Bild sichern) into Camera Roll
+      const isIOS = typeof navigator !== "undefined" && /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (isIOS && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: "Сватбена снимка",
+        });
+      }
+
       setDownloadSuccess(true);
-      setTimeout(() => setDownloadSuccess(false), 2500);
-    } catch {
-      // If user cancelled or error, show tip to long-press
       setShowSaveTip(true);
-      setTimeout(() => setShowSaveTip(false), 5000);
+      setTimeout(() => {
+        setDownloadSuccess(false);
+        setShowSaveTip(false);
+      }, 4000);
+    } catch (err: unknown) {
+      if ((err as Error)?.name !== "AbortError") {
+        setShowSaveTip(true);
+        setTimeout(() => setShowSaveTip(false), 4000);
+      }
     } finally {
       setIsDownloading(false);
     }
@@ -143,7 +141,7 @@ export default function GalleryView({
             Сватбени Спомени
           </h2>
           <p className="text-xs sm:text-sm text-[#7a6d5f] mt-0.5">
-            Общо {photos.length} снимки. Докоснете снимка за голям преглед и сваляне в телефона.
+            Общо {photos.length} снимки. Докоснете снимка за пълен преглед и сваляне в телефона.
           </p>
         </div>
 
@@ -174,21 +172,21 @@ export default function GalleryView({
         </div>
       )}
 
-      {/* Photos Grid */}
+      {/* Photos Grid - 4:5 aspect ratio so portrait wedding photos are not severely cropped */}
       {photos.length > 0 && (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2.5 sm:gap-3.5">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
             {visiblePhotos.map((photo, index) => (
               <div
                 key={photo.url || index}
                 onClick={() => setSelectedIndex(index)}
-                className="group relative aspect-square rounded-2xl overflow-hidden bg-[#f0ebe1] border border-[#e8d8c2] cursor-pointer shadow-xs hover:shadow-md hover:border-[#a8824b] transition-all duration-200"
+                className="group relative aspect-[4/5] rounded-2xl overflow-hidden bg-[#f0ebe1] border border-[#e8d8c2] cursor-pointer shadow-xs hover:shadow-md hover:border-[#a8824b] transition-all duration-200"
               >
                 <Image
                   src={photo.url}
                   alt={`Сватбена снимка ${index + 1}`}
                   fill
-                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
                   className="object-cover group-hover:scale-105 transition-transform duration-300"
                   unoptimized
                 />
@@ -215,7 +213,7 @@ export default function GalleryView({
         </>
       )}
 
-      {/* FULLSCREEN LIGHTBOX - WITH VERTICAL SCROLL SUPPORT FOR TALL PHOTOS */}
+      {/* FULLSCREEN LIGHTBOX - LARGE UNCROPPED PHOTOS WITH SWIPE & SCROLL */}
       {selectedIndex !== null && currentPhoto && (
         <div
           role="dialog"
@@ -229,7 +227,7 @@ export default function GalleryView({
               {selectedIndex + 1} / {photos.length}
             </div>
 
-            {/* Right: DOWNLOAD BUTTON + CLOSE */}
+            {/* Right: PRIMARY DOWNLOAD BUTTON + CLOSE */}
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleSaveToPhotos(currentPhoto)}
@@ -245,7 +243,7 @@ export default function GalleryView({
                 ) : downloadSuccess ? (
                   <>
                     <Check className="w-4 h-4 text-[#2d5a2d]" />
-                    <span>Запазено!</span>
+                    <span>Свалено в Галерията!</span>
                   </>
                 ) : (
                   <>
@@ -265,25 +263,25 @@ export default function GalleryView({
             </div>
           </div>
 
-          {/* IPHONE CAMERA ROLL HINT POPUP */}
+          {/* IPHONE & ANDROID HINT POPUP */}
           {showSaveTip && (
             <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] sm:max-w-md bg-[#dfba73] text-[#2d2621] p-3.5 rounded-2xl shadow-2xl border border-white/30 text-xs text-center animate-fade-in">
               <p className="font-semibold text-sm mb-1 flex items-center justify-center gap-1.5">
-                <Share2 className="w-4 h-4" />
-                <span>Запазване в Снимки (iPhone / Android)</span>
+                <Check className="w-4 h-4 text-[#2d5a2d]" />
+                <span>Снимката е свалена на телефона!</span>
               </p>
               <p>
-                В отвореното меню изберете <strong>&bdquo;Запази изображението&ldquo; (Save Image / Bild sichern)</strong>.
+                <strong>Android:</strong> Снимката е в папка &bdquo;Свалени&ldquo; (Downloads) в Галерията!
               </p>
-              <p className="mt-1 text-[11px] opacity-80">
-                Или просто задръжте пръст върху снимката ➔ &bdquo;Запази в Снимки&ldquo;.
+              <p className="mt-1 text-[11px] opacity-90">
+                <strong>iPhone:</strong> Изберете &bdquo;Запази изображението&ldquo; (Save Image) или задръжте пръст върху снимката.
               </p>
             </div>
           )}
 
-          {/* MAIN PHOTO CONTAINER: SCROLLABLE VERTICALLY WITH AMPLE PADDING */}
+          {/* MAIN PHOTO CONTAINER: LARGE UNCROPPED DISPLAY */}
           <div
-            className="min-h-[100dvh] w-full pt-16 pb-24 px-2 sm:px-4 flex flex-col items-center justify-center"
+            className="min-h-[100dvh] w-full pt-16 pb-28 px-1 sm:px-4 flex flex-col items-center justify-center"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
@@ -314,8 +312,8 @@ export default function GalleryView({
               <ChevronRight className="w-6 h-6" />
             </button>
 
-            {/* The Photo: allows scrolling down completely, touch-callout enabled for iPhone */}
-            <div className="relative max-w-4xl w-full flex flex-col items-center justify-center my-auto py-2">
+            {/* The Photo: Large, uncropped, filling the screen */}
+            <div className="relative w-full max-w-5xl flex flex-col items-center justify-center my-auto py-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={currentPhoto.url}
@@ -324,20 +322,26 @@ export default function GalleryView({
                   WebkitTouchCallout: "default",
                   userSelect: "auto",
                 }}
-                className="w-auto h-auto max-w-full max-h-[85vh] sm:max-h-[82vh] object-contain rounded-xl shadow-2xl pointer-events-auto"
+                className="w-full h-auto max-h-[88vh] sm:max-h-[85vh] object-contain rounded-xl shadow-2xl pointer-events-auto"
               />
 
-              {/* iPhone Quick Tip Below Photo */}
-              <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-white/50 text-center px-4">
+              {/* CLEAR PROMINENT SWIPE HINT BADGE (REQUESTED BY USER) */}
+              <div className="mt-3 inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-white/90 text-xs font-medium border border-white/10 shadow-sm text-center">
+                <ArrowLeftRight className="w-3.5 h-3.5 text-[#dfba73]" />
+                <span>Плъзнете с пръст ↔ за смяна на снимка (Wischen)</span>
+              </div>
+
+              {/* Tips for iPhone and Android */}
+              <div className="mt-2 flex items-center justify-center gap-1 text-[11px] text-white/50 text-center px-4">
                 <Info className="w-3.5 h-3.5 text-[#dfba73]" />
                 <span>
-                  iPhone съвет: Задръжте пръст върху снимката ➔ &bdquo;Запази в Снимки&ldquo;
+                  Запазване: натиснете &bdquo;Свали в галерията&ldquo; или задръжте пръст върху снимката
                 </span>
               </div>
             </div>
           </div>
 
-          {/* FIXED BOTTOM NAVIGATION BAR FOR PHONES */}
+          {/* FIXED BOTTOM NAVIGATION BAR */}
           <div className="fixed bottom-0 left-0 right-0 z-40 px-4 py-2 sm:py-2.5 flex items-center justify-between bg-black/85 backdrop-blur-md border-t border-white/10">
             <button
               onClick={() => {
@@ -351,8 +355,8 @@ export default function GalleryView({
               <span>Предишна</span>
             </button>
 
-            <span className="text-[11px] text-white/50">
-              Скролвайте надолу ↕ или плъзнете ↔
+            <span className="text-[11px] text-white/60">
+              Скрол надолу ↕ или плъзнете ↔
             </span>
 
             <button

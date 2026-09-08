@@ -2,9 +2,10 @@
 
 import React, { useState, useRef } from "react";
 import { Camera, Check, Loader2, ArrowRight, Image as ImageIcon, Plus } from "lucide-react";
+import { PhotoItem } from "./GalleryView";
 
 interface UploadSectionProps {
-  onUploadSuccess: () => void;
+  onUploadSuccess: (newUploaded?: PhotoItem[]) => void;
   onGoToGallery: () => void;
 }
 
@@ -47,6 +48,7 @@ export default function UploadSection({ onUploadSuccess, onGoToGallery }: Upload
 
     let successCount = 0;
     const total = selectedFiles.length;
+    const allUploaded: PhotoItem[] = [];
 
     try {
       // Upload one by one to never exceed Vercel's 4.5MB serverless body payload limit
@@ -64,6 +66,9 @@ export default function UploadSection({ onUploadSuccess, onGoToGallery }: Upload
         if (!res.ok) {
           throw new Error(data.error || `Грешка при снимка ${i + 1}`);
         }
+        if (data.uploaded && Array.isArray(data.uploaded)) {
+          allUploaded.push(...data.uploaded);
+        }
         successCount++;
       }
 
@@ -80,7 +85,7 @@ export default function UploadSection({ onUploadSuccess, onGoToGallery }: Upload
       setPreviews([]);
       if (fileInputRef.current) fileInputRef.current.value = "";
 
-      onUploadSuccess();
+      onUploadSuccess(allUploaded);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Грешка при качването.";
       setMessage({ type: "error", text: msg });

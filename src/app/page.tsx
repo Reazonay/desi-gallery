@@ -17,15 +17,53 @@ export default function Home() {
     try {
       const res = await fetch("/api/photos", { cache: "no-store" });
       const data = await res.json();
-      if (data.photos) {
-        setPhotos(data.photos);
-      }
+      let serverPhotos: PhotoItem[] = data.photos || [];
+
+      // Merge with locally uploaded photos if any
+      try {
+        const local = JSON.parse(
+          localStorage.getItem("custom_uploaded_wedding_photos") || "[]"
+        ) as PhotoItem[];
+        if (local && local.length > 0) {
+          const serverUrls = new Set(serverPhotos.map((p) => p.url));
+          const newUnique = local.filter((p) => !serverUrls.has(p.url));
+          serverPhotos = [...newUnique, ...serverPhotos];
+        }
+      } catch {}
+
+      setPhotos(serverPhotos);
     } catch (err) {
       console.error("Failed to load photos:", err);
     } finally {
       setIsLoading(false);
     }
   }, []);
+
+  const handleUploadSuccess = useCallback(
+    (newUploaded?: PhotoItem[]) => {
+      if (newUploaded && newUploaded.length > 0) {
+        setPhotos((prev) => {
+          const prevUrls = new Set(prev.map((p) => p.url));
+          const unique = newUploaded.filter((p) => !prevUrls.has(p.url));
+          const combined = [...unique, ...prev];
+
+          try {
+            const local = JSON.parse(
+              localStorage.getItem("custom_uploaded_wedding_photos") || "[]"
+            ) as PhotoItem[];
+            localStorage.setItem(
+              "custom_uploaded_wedding_photos",
+              JSON.stringify([...unique, ...local])
+            );
+          } catch {}
+
+          return combined;
+        });
+      }
+      fetchPhotos();
+    },
+    [fetchPhotos]
+  );
 
   useEffect(() => {
     fetchPhotos();
@@ -105,7 +143,7 @@ export default function Home() {
       <main className="flex-1">
         {activeTab === "upload" && (
           <UploadSection
-            onUploadSuccess={fetchPhotos}
+            onUploadSuccess={handleUploadSuccess}
             onGoToGallery={() => setActiveTab("gallery")}
           />
         )}

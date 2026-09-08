@@ -8,7 +8,6 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   try {
     const formData = await request.formData();
-    // Support both single file and multiple files in form data
     const rawFiles = formData.getAll("file").concat(formData.getAll("files")) as File[];
     const files = rawFiles.filter((f) => f && f.size > 0);
 
@@ -19,20 +18,36 @@ export async function POST(request: Request): Promise<NextResponse> {
       );
     }
 
+    const uploaded = [];
+
     if (!token) {
-      // Message when Blob storage is not connected yet
+      // Blob storage not connected yet - convert to data URLs so client can immediately display them
+      for (const file of files) {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const base64 = buffer.toString("base64");
+        const mime = file.type || "image/jpeg";
+        const dataUrl = `data:${mime};base64,${base64}`;
+
+        uploaded.push({
+          url: dataUrl,
+          pathname: file.name,
+          size: file.size,
+          uploadedAt: new Date().toISOString(),
+          downloadUrl: dataUrl,
+        });
+      }
+
       return NextResponse.json({
-        warning:
-          "Vercel Blob хранилището все още не е активирано във Vercel. След като натиснете 'Create Blob' във Vercel Storage, снимките ще се пазят завинаги.",
         success: true,
         demo: true,
+        warning:
+          "Vercel Blob хранилището все още не е активирано във Vercel. За да се виждат снимките от всички гости, активирайте 'Blob' в Storage таба на Vercel.",
+        uploaded,
       });
     }
 
-    const uploaded = [];
-
+    // When token is set, upload permanently to Vercel Blob CDN
     for (const file of files) {
-      // Clean safe filename
       const cleanName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
       const filename = `wedding/${Date.now()}-${cleanName}`;
 
@@ -40,10 +55,12 @@ export async function POST(request: Request): Promise<NextResponse> {
         access: "public",
         addRandomSuffix: true,
       });
+
       uploaded.push({
         url: blob.url,
         pathname: blob.pathname,
         size: file.size,
+        uploadedAt: new Date().toISOString(),
         downloadUrl: blob.downloadUrl || blob.url,
       });
     }
