@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
-import { Download, ChevronLeft, ChevronRight, X, Loader2, RefreshCw, Check, Share } from "lucide-react";
+import { Download, ChevronLeft, ChevronRight, X, Loader2, RefreshCw, Check, Share2, Info } from "lucide-react";
 
 export interface PhotoItem {
   url: string;
@@ -31,22 +31,7 @@ export default function GalleryView({
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Lock body scroll when lightbox is active
-  useEffect(() => {
-    if (selectedIndex !== null) {
-      document.body.style.overflow = "hidden";
-      document.documentElement.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-      document.documentElement.style.overflow = "";
-    };
-  }, [selectedIndex]);
+  const [showSaveTip, setShowSaveTip] = useState(false);
 
   // Keyboard navigation
   const handleKeyDown = useCallback(
@@ -68,7 +53,7 @@ export default function GalleryView({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  // Touch swipe support for mobile
+  // Touch swipe detection on mobile
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
 
@@ -82,15 +67,13 @@ export default function GalleryView({
     const deltaX = e.changedTouches[0].clientX - touchStartX.current;
     const deltaY = e.changedTouches[0].clientY - touchStartY.current;
 
-    // Horizontal swipe threshold
-    if (Math.abs(deltaX) > 35 && Math.abs(deltaX) > Math.abs(deltaY)) {
+    // Only swipe if horizontal movement is significantly greater than vertical scroll
+    if (Math.abs(deltaX) > 50 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
       if (deltaX < 0) {
-        // swipe left -> next photo
         setSelectedIndex((prev) =>
           prev !== null && prev < photos.length - 1 ? prev + 1 : 0
         );
       } else {
-        // swipe right -> previous photo
         setSelectedIndex((prev) =>
           prev !== null && prev > 0 ? prev - 1 : photos.length - 1
         );
@@ -100,8 +83,8 @@ export default function GalleryView({
     touchStartY.current = null;
   };
 
-  // Direct save to mobile Photos Gallery via Web Share API
-  const handleDownloadToGallery = async (photo: PhotoItem) => {
+  // Dedicated save directly to iPhone / Android Photos
+  const handleSaveToPhotos = async (photo: PhotoItem) => {
     setIsDownloading(true);
     const filename = photo.pathname?.split("/").pop() || `svatba-${Date.now()}.jpg`;
 
@@ -109,12 +92,11 @@ export default function GalleryView({
       const targetUrl = photo.downloadUrl || photo.url;
       const res = await fetch(targetUrl);
       const blob = await res.blob();
-      const file = new File([blob], filename, { type: blob.type || "image/jpeg" });
+      const file = new File([blob], filename, { type: "image/jpeg" });
 
-      // Check if native Web Share with files is supported (iPhone Safari & Android Chrome)
-      // This is the ONLY API that triggers "Save Image" into Apple Photos / Google Photos!
+      // If Web Share API with files is available (iPhone Safari / Android)
       if (typeof navigator !== "undefined" && navigator.canShare && navigator.canShare({ files: [file] })) {
-        setToastMessage("Изберете 'Запази изображението' (Save Image) за галерията!");
+        setShowSaveTip(true);
         await navigator.share({
           files: [file],
           title: "Сватбена снимка",
@@ -122,13 +104,13 @@ export default function GalleryView({
         setDownloadSuccess(true);
         setTimeout(() => {
           setDownloadSuccess(false);
-          setToastMessage(null);
-        }, 3000);
+          setShowSaveTip(false);
+        }, 3500);
         setIsDownloading(false);
         return;
       }
 
-      // Fallback for Desktop: regular download
+      // Fallback for desktop: browser download
       const objectUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -139,20 +121,11 @@ export default function GalleryView({
       window.URL.revokeObjectURL(objectUrl);
 
       setDownloadSuccess(true);
-      setToastMessage("Снимката е свалена на вашето устройство!");
-      setTimeout(() => {
-        setDownloadSuccess(false);
-        setToastMessage(null);
-      }, 2500);
-    } catch (err: unknown) {
-      if ((err as Error)?.name !== "AbortError") {
-        // Direct browser fallback
-        const link = document.createElement("a");
-        link.href = photo.downloadUrl || photo.url;
-        link.download = filename;
-        link.target = "_blank";
-        link.click();
-      }
+      setTimeout(() => setDownloadSuccess(false), 2500);
+    } catch {
+      // If user cancelled or error, show tip to long-press
+      setShowSaveTip(true);
+      setTimeout(() => setShowSaveTip(false), 5000);
     } finally {
       setIsDownloading(false);
     }
@@ -170,7 +143,7 @@ export default function GalleryView({
             Сватбени Спомени
           </h2>
           <p className="text-xs sm:text-sm text-[#7a6d5f] mt-0.5">
-            Общо {photos.length} снимки. Докоснете снимка за голям преглед и запазване в телефона.
+            Общо {photos.length} снимки. Докоснете снимка за голям преглед и сваляне в телефона.
           </p>
         </div>
 
@@ -242,32 +215,32 @@ export default function GalleryView({
         </>
       )}
 
-      {/* FULLSCREEN LIGHTBOX - MAXIMIZED FOR LARGE PHOTO DISPLAY ON MOBILE WITH ZERO SCROLL */}
+      {/* FULLSCREEN LIGHTBOX - WITH VERTICAL SCROLL SUPPORT FOR TALL PHOTOS */}
       {selectedIndex !== null && currentPhoto && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 h-[100dvh] w-screen overflow-hidden bg-black/95 flex flex-col justify-between select-none touch-none overscroll-none"
+          className="fixed inset-0 z-50 bg-black/95 overflow-y-auto overscroll-contain"
         >
-          {/* FLOATING TOP BAR: Always pinned at top with Counter, Download/Save button and Close button */}
-          <header className="shrink-0 w-full px-3 py-2 sm:px-6 sm:py-3 flex items-center justify-between bg-black/80 backdrop-blur-md border-b border-white/10 z-30">
+          {/* FIXED TOP BAR: ALWAYS VISIBLE AND PINNED AT TOP RIGHT */}
+          <div className="fixed top-0 left-0 right-0 z-50 px-3 py-2.5 sm:px-6 sm:py-3 flex items-center justify-between bg-black/85 backdrop-blur-md border-b border-white/10">
             {/* Left: Counter */}
             <div className="text-xs sm:text-sm text-white/90 bg-white/15 px-3 py-1 rounded-full font-medium">
               {selectedIndex + 1} / {photos.length}
             </div>
 
-            {/* Right: SAVE TO GALLERY BUTTON (IN TOP RIGHT AS REQUESTED) + CLOSE BUTTON */}
+            {/* Right: DOWNLOAD BUTTON + CLOSE */}
             <div className="flex items-center gap-2">
               <button
-                onClick={() => handleDownloadToGallery(currentPhoto)}
+                onClick={() => handleSaveToPhotos(currentPhoto)}
                 disabled={isDownloading}
-                title="Запази директно в Снимки на телефона"
-                className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-[#dfba73] hover:bg-[#c9a35e] text-[#2d2621] font-semibold text-xs sm:text-sm shadow-md transition transform active:scale-95 cursor-pointer disabled:opacity-50"
+                title="Свали директно в Снимки на телефона"
+                className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl bg-[#dfba73] hover:bg-[#c9a35e] text-[#2d2621] font-semibold text-xs sm:text-sm shadow-lg transition transform active:scale-95 cursor-pointer disabled:opacity-50"
               >
                 {isDownloading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Обработка...</span>
+                    <span>Сваляне...</span>
                   </>
                 ) : downloadSuccess ? (
                   <>
@@ -284,28 +257,37 @@ export default function GalleryView({
 
               <button
                 onClick={() => setSelectedIndex(null)}
-                className="p-1.5 sm:p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
+                className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
                 title="Затвори"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-          </header>
+          </div>
 
-          {/* Toast / Notification Banner */}
-          {toastMessage && (
-            <div className="absolute top-14 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-2xl bg-[#dfba73] text-[#2d2621] font-medium text-xs shadow-lg animate-fade-in text-center max-w-[90vw]">
-              {toastMessage}
+          {/* IPHONE CAMERA ROLL HINT POPUP */}
+          {showSaveTip && (
+            <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] sm:max-w-md bg-[#dfba73] text-[#2d2621] p-3.5 rounded-2xl shadow-2xl border border-white/30 text-xs text-center animate-fade-in">
+              <p className="font-semibold text-sm mb-1 flex items-center justify-center gap-1.5">
+                <Share2 className="w-4 h-4" />
+                <span>Запазване в Снимки (iPhone / Android)</span>
+              </p>
+              <p>
+                В отвореното меню изберете <strong>&bdquo;Запази изображението&ldquo; (Save Image / Bild sichern)</strong>.
+              </p>
+              <p className="mt-1 text-[11px] opacity-80">
+                Или просто задръжте пръст върху снимката ➔ &bdquo;Запази в Снимки&ldquo;.
+              </p>
             </div>
           )}
 
-          {/* MAIN PHOTO DISPLAY: EXPANDED TO MAXIMUM SCREEN SIZE (ZERO PADDING RESTRICTIONS) */}
+          {/* MAIN PHOTO CONTAINER: SCROLLABLE VERTICALLY WITH AMPLE PADDING */}
           <div
-            className="relative flex-1 min-h-0 w-full flex items-center justify-center p-1 sm:p-2 overflow-hidden"
+            className="min-h-[100dvh] w-full pt-16 pb-24 px-2 sm:px-4 flex flex-col items-center justify-center"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
-            {/* Desktop Left Button */}
+            {/* Desktop Navigation Arrows */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -313,23 +295,12 @@ export default function GalleryView({
                   prev !== null && prev > 0 ? prev - 1 : photos.length - 1
                 );
               }}
-              className="hidden md:flex absolute left-4 z-20 p-3 rounded-full bg-black/50 hover:bg-black/80 text-white border border-white/20 transition cursor-pointer"
+              className="hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
               title="Предишна снимка"
             >
               <ChevronLeft className="w-6 h-6" />
             </button>
 
-            {/* The Image: Fills almost 100% of the visible viewport */}
-            <div className="relative w-full h-full flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={currentPhoto.url}
-                alt={`Сватбена снимка ${selectedIndex + 1}`}
-                className="max-h-[92dvh] max-w-[99vw] w-auto h-auto object-contain rounded-md shadow-2xl"
-              />
-            </div>
-
-            {/* Desktop Right Button */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -337,29 +308,51 @@ export default function GalleryView({
                   prev !== null && prev < photos.length - 1 ? prev + 1 : 0
                 );
               }}
-              className="hidden md:flex absolute right-4 z-20 p-3 rounded-full bg-black/50 hover:bg-black/80 text-white border border-white/20 transition cursor-pointer"
+              className="hidden md:flex fixed right-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
               title="Следваща снимка"
             >
               <ChevronRight className="w-6 h-6" />
             </button>
+
+            {/* The Photo: allows scrolling down completely, touch-callout enabled for iPhone */}
+            <div className="relative max-w-4xl w-full flex flex-col items-center justify-center my-auto py-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={currentPhoto.url}
+                alt={`Сватбена снимка ${selectedIndex + 1}`}
+                style={{
+                  WebkitTouchCallout: "default",
+                  userSelect: "auto",
+                }}
+                className="w-auto h-auto max-w-full max-h-[85vh] sm:max-h-[82vh] object-contain rounded-xl shadow-2xl pointer-events-auto"
+              />
+
+              {/* iPhone Quick Tip Below Photo */}
+              <div className="mt-3 flex items-center justify-center gap-1.5 text-[11px] text-white/50 text-center px-4">
+                <Info className="w-3.5 h-3.5 text-[#dfba73]" />
+                <span>
+                  iPhone съвет: Задръжте пръст върху снимката ➔ &bdquo;Запази в Снимки&ldquo;
+                </span>
+              </div>
+            </div>
           </div>
 
-          {/* SLIM MINIMAL BOTTOM BAR: THUMB CONTROLS & HINTS */}
-          <footer className="shrink-0 w-full px-4 py-1.5 sm:py-2 flex items-center justify-between bg-black/70 backdrop-blur-md border-t border-white/10 z-30">
+          {/* FIXED BOTTOM NAVIGATION BAR FOR PHONES */}
+          <div className="fixed bottom-0 left-0 right-0 z-40 px-4 py-2 sm:py-2.5 flex items-center justify-between bg-black/85 backdrop-blur-md border-t border-white/10">
             <button
               onClick={() => {
                 setSelectedIndex((prev) =>
                   prev !== null && prev > 0 ? prev - 1 : photos.length - 1
                 );
               }}
-              className="flex items-center gap-1 px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
+              className="flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Предишна</span>
             </button>
 
             <span className="text-[11px] text-white/50">
-              Плъзнете с пръст ↔
+              Скролвайте надолу ↕ или плъзнете ↔
             </span>
 
             <button
@@ -368,12 +361,12 @@ export default function GalleryView({
                   prev !== null && prev < photos.length - 1 ? prev + 1 : 0
                 );
               }}
-              className="flex items-center gap-1 px-3 py-1 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
+              className="flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
             >
               <span>Следваща</span>
               <ChevronRight className="w-4 h-4" />
             </button>
-          </footer>
+          </div>
         </div>
       )}
     </div>
