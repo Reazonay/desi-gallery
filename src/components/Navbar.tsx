@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { UploadCloud, Images, Video } from "lucide-react";
+import { Camera, Image as ImageIcon, Film } from "lucide-react";
 
 export type ActiveTab = "upload" | "gallery" | "trailer";
 
@@ -13,46 +13,53 @@ interface NavbarProps {
 
 export default function Navbar({ activeTab, setActiveTab, photoCount }: NavbarProps) {
   return (
-    <header className="sticky top-0 z-40 w-full backdrop-blur-md bg-slate-950/85 border-b border-slate-800">
-      <div className="max-w-6xl mx-auto px-4 py-3 sm:py-4 flex flex-col md:flex-row items-center justify-between gap-4">
-        {/* Logo & Title */}
-        <div className="text-center md:text-left cursor-pointer" onClick={() => setActiveTab("gallery")}>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight bg-gradient-to-r from-amber-200 via-rose-300 to-amber-400 bg-clip-text text-transparent">
-            Споделена Галерия
+    <header className="sticky top-0 z-40 w-full bg-[#faf8f5]/95 backdrop-blur-md border-b border-[#eadecf] shadow-sm">
+      <div className="max-w-4xl mx-auto px-4 py-3 sm:py-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+        {/* Title */}
+        <button
+          onClick={() => setActiveTab("gallery")}
+          className="text-center sm:text-left group cursor-pointer"
+        >
+          <span className="text-xs uppercase tracking-widest text-[#a8824b] font-medium block">
+            Сватбен Ден
+          </span>
+          <h1 className="font-wedding text-2xl sm:text-3xl font-semibold text-[#3b3228] tracking-tight group-hover:text-[#a8824b] transition">
+            Сватбена Галерия
           </h1>
-          <p className="text-xs text-slate-400">
-            Качване, преглед и сваляне на незабравими спомени
-          </p>
-        </div>
+        </button>
 
         {/* 3 Main Action Buttons */}
-        <div className="flex items-center gap-2 p-1.5 bg-slate-900/90 rounded-2xl border border-slate-800/80 shadow-inner">
+        <nav className="flex items-center gap-1.5 p-1 bg-[#f0ebe1] rounded-2xl border border-[#e4dcd0]">
           {/* Button 1: Upload */}
           <button
             onClick={() => setActiveTab("upload")}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 cursor-pointer ${
               activeTab === "upload"
-                ? "bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-md shadow-rose-500/20 scale-[1.02]"
-                : "text-slate-300 hover:text-white hover:bg-slate-800/70"
+                ? "bg-[#3b3228] text-[#fdfbf7] shadow-sm scale-[1.02]"
+                : "text-[#6b5e51] hover:text-[#2d2621] hover:bg-[#e6dfd3]"
             }`}
           >
-            <UploadCloud className="w-4 h-4" />
-            <span>Качи снимки</span>
+            <Camera className="w-4 h-4 text-[#dfba73]" />
+            <span>Качи снимка</span>
           </button>
 
           {/* Button 2: Gallery */}
           <button
             onClick={() => setActiveTab("gallery")}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 cursor-pointer ${
               activeTab === "gallery"
-                ? "bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-md shadow-rose-500/20 scale-[1.02]"
-                : "text-slate-300 hover:text-white hover:bg-slate-800/70"
+                ? "bg-[#3b3228] text-[#fdfbf7] shadow-sm scale-[1.02]"
+                : "text-[#6b5e51] hover:text-[#2d2621] hover:bg-[#e6dfd3]"
             }`}
           >
-            <Images className="w-4 h-4" />
+            <ImageIcon className="w-4 h-4 text-[#dfba73]" />
             <span>Галерия</span>
             {photoCount > 0 && (
-              <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-slate-800 text-amber-300 border border-slate-700">
+              <span className={`text-[11px] px-1.5 py-0.2 rounded-full font-semibold ${
+                activeTab === "gallery"
+                  ? "bg-[#55493d] text-[#f3e9d8]"
+                  : "bg-[#e2d8c9] text-[#594d40]"
+              }`}>
                 {photoCount}
               </span>
             )}
@@ -61,16 +68,16 @@ export default function Navbar({ activeTab, setActiveTab, photoCount }: NavbarPr
           {/* Button 3: Trailer */}
           <button
             onClick={() => setActiveTab("trailer")}
-            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-sm font-medium transition-all duration-200 ${
+            className={`flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-medium transition-all duration-200 cursor-pointer ${
               activeTab === "trailer"
-                ? "bg-gradient-to-r from-amber-500 to-rose-500 text-white shadow-md shadow-rose-500/20 scale-[1.02]"
-                : "text-slate-300 hover:text-white hover:bg-slate-800/70"
+                ? "bg-[#3b3228] text-[#fdfbf7] shadow-sm scale-[1.02]"
+                : "text-[#6b5e51] hover:text-[#2d2621] hover:bg-[#e6dfd3]"
             }`}
           >
-            <Video className="w-4 h-4" />
+            <Film className="w-4 h-4 text-[#dfba73]" />
             <span>Трейлър</span>
           </button>
-        </div>
+        </nav>
       </div>
     </header>
   );

@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { UploadCloud, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, ArrowRight } from "lucide-react";
+import { Camera, Check, Loader2, ArrowRight, Image as ImageIcon } from "lucide-react";
 
 interface UploadSectionProps {
   onUploadSuccess: () => void;
@@ -12,62 +12,35 @@ export default function UploadSection({ onUploadSuccess, onGoToGallery }: Upload
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<{
-    type: "idle" | "success" | "error";
-    message: string;
-  }>({ type: "idle", message: "" });
-  const [dragActive, setDragActive] = useState(false);
+  const [message, setMessage] = useState<{ type: "idle" | "success" | "error"; text: string }>({
+    type: "idle",
+    text: "",
+  });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFiles = (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    const fileArray = Array.from(files).filter((file) => file.type.startsWith("image/"));
-    if (fileArray.length === 0) {
-      setUploadStatus({
-        type: "error",
-        message: "Моля, изберете валидни файлове за снимки (JPG, PNG, HEIC, WEBP).",
-      });
+    const list = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (list.length === 0) {
+      setMessage({ type: "error", text: "Моля, изберете снимки (JPG, PNG, HEIC)." });
       return;
     }
 
-    setSelectedFiles((prev) => [...prev, ...fileArray]);
-
-    // Generate previews
-    const newPreviews = fileArray.map((file) => URL.createObjectURL(file));
-    setPreviews((prev) => [...prev, ...newPreviews]);
-    setUploadStatus({ type: "idle", message: "" });
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragActive(false);
-    if (e.dataTransfer.files) {
-      handleFiles(e.dataTransfer.files);
-    }
-  };
-
-  const clearSelection = () => {
-    previews.forEach((url) => URL.revokeObjectURL(url));
-    setSelectedFiles([]);
-    setPreviews([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-    setUploadStatus({ type: "idle", message: "" });
+    setSelectedFiles((prev) => [...prev, ...list]);
+    const urls = list.map((f) => URL.createObjectURL(f));
+    setPreviews((prev) => [...prev, ...urls]);
+    setMessage({ type: "idle", text: "" });
   };
 
   const handleUpload = async () => {
     if (selectedFiles.length === 0) return;
-
     setIsUploading(true);
-    setUploadStatus({ type: "idle", message: "" });
+    setMessage({ type: "idle", text: "" });
 
     try {
       const formData = new FormData();
-      selectedFiles.forEach((file) => {
-        formData.append("files", file);
-      });
+      selectedFiles.forEach((file) => formData.append("files", file));
 
       const res = await fetch("/api/upload", {
         method: "POST",
@@ -75,69 +48,46 @@ export default function UploadSection({ onUploadSuccess, onGoToGallery }: Upload
       });
 
       const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Грешка при качването.");
 
-      if (!res.ok) {
-        throw new Error(data.error || "Възникна проблем при качването.");
-      }
+      setMessage({
+        type: "success",
+        text: `Успешно качени ${selectedFiles.length} ${
+          selectedFiles.length === 1 ? "снимка" : "снимки"
+        }!`,
+      });
 
-      if (data.demo) {
-        setUploadStatus({
-          type: "success",
-          message:
-            "Снимките са обработени! (Локален тестов режим – във Vercel ще се качват в облака веднага).",
-        });
-      } else {
-        setUploadStatus({
-          type: "success",
-          message: `Успешно качени ${selectedFiles.length} ${
-            selectedFiles.length === 1 ? "снимка" : "снимки"
-          }!`,
-        });
-      }
+      // Clear selection
+      previews.forEach((u) => URL.revokeObjectURL(u));
+      setSelectedFiles([]);
+      setPreviews([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
 
-      clearSelection();
       onUploadSuccess();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Грешка при качване на снимките.";
-      setUploadStatus({
-        type: "error",
-        message: msg,
-      });
+      const msg = err instanceof Error ? err.message : "Грешка при качването.";
+      setMessage({ type: "error", text: msg });
     } finally {
       setIsUploading(false);
     }
   };
 
   return (
-    <section className="max-w-3xl mx-auto px-4 py-8 sm:py-12">
-      <div className="text-center mb-8">
-        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 mb-3">
-          Стъпка 1: Споделете вашите моменти
-        </span>
-        <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
-          Качване на снимки в общия албум
-        </h2>
-        <p className="mt-2 text-sm text-slate-400 max-w-lg mx-auto">
-          Изберете снимки директно от камерата или галерията на телефона си. Всички снимки ще
-          бъдат видими в общата галерия за сваляне.
-        </p>
-      </div>
+    <div className="max-w-xl mx-auto px-4 py-8 animate-fade-in">
+      <div className="bg-white rounded-3xl p-6 sm:p-8 border border-[#eadecf] shadow-sm text-center">
+        <div className="w-16 h-16 mx-auto rounded-full bg-[#fbf6ed] border border-[#e8d8c2] flex items-center justify-center text-[#a8824b] mb-4">
+          <Camera className="w-8 h-8" />
+        </div>
 
-      {/* Upload Dropzone */}
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={() => setDragActive(false)}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-        className={`relative border-2 border-dashed rounded-3xl p-8 sm:p-12 text-center cursor-pointer transition-all duration-200 ${
-          dragActive
-            ? "border-amber-400 bg-amber-500/10 scale-[1.01]"
-            : "border-slate-700 bg-slate-900/60 hover:border-slate-500 hover:bg-slate-900"
-        }`}
-      >
+        <h2 className="font-wedding text-2xl sm:text-3xl text-[#3b3228] font-semibold">
+          Качете вашите снимки
+        </h2>
+        <p className="text-sm text-[#7a6d5f] mt-2 max-w-md mx-auto">
+          Бяхте ли част от нашия празник? Добавете вашите снимки към общия сватбен албум, за да
+          могат всички да ги видят и свалят.
+        </p>
+
+        {/* Big Touch Select Button */}
         <input
           ref={fileInputRef}
           type="file"
@@ -147,118 +97,102 @@ export default function UploadSection({ onUploadSuccess, onGoToGallery }: Upload
           onChange={(e) => handleFiles(e.target.files)}
         />
 
-        <div className="flex flex-col items-center justify-center gap-3">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-amber-500 to-rose-500 flex items-center justify-center text-white shadow-lg shadow-rose-500/20">
-            <UploadCloud className="w-8 h-8" />
-          </div>
-
-          <div>
-            <p className="text-base sm:text-lg font-semibold text-white">
-              Натиснете тук за избор на снимки
-            </p>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              или плъзнете файловете тук (поддържа JPEG, PNG, WEBP, HEIC)
-            </p>
-          </div>
-
+        <div className="mt-6">
           <button
             type="button"
-            className="mt-2 px-5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium border border-slate-700 transition"
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full py-4 px-6 rounded-2xl bg-[#3b3228] hover:bg-[#2d2621] text-[#fdfbf7] font-medium text-base shadow-sm transition transform active:scale-98 flex items-center justify-center gap-3 cursor-pointer"
           >
-            Избери от телефона / компютъра
+            <Camera className="w-5 h-5 text-[#dfba73]" />
+            <span>Изберете снимки от телефона</span>
           </button>
+          <p className="text-xs text-[#9c8e80] mt-2">
+            Можете да изберете една или много снимки наведнъж
+          </p>
         </div>
-      </div>
 
-      {/* Selected Previews */}
-      {selectedFiles.length > 0 && (
-        <div className="mt-6 p-4 sm:p-6 bg-slate-900/80 rounded-2xl border border-slate-800">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <ImageIcon className="w-4 h-4 text-amber-400" />
-              Избрани снимки ({selectedFiles.length})
-            </h3>
-            <button
-              onClick={clearSelection}
-              disabled={isUploading}
-              className="text-xs text-rose-400 hover:text-rose-300 font-medium transition"
-            >
-              Изчисти избора
-            </button>
-          </div>
-
-          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2.5 max-h-56 overflow-y-auto pr-1">
-            {previews.map((src, index) => (
-              <div
-                key={index}
-                className="relative aspect-square rounded-xl overflow-hidden bg-slate-800 border border-slate-700/60"
+        {/* Selected Photos Preview */}
+        {selectedFiles.length > 0 && (
+          <div className="mt-6 text-left border-t border-[#f0ebe1] pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-semibold uppercase tracking-wider text-[#7a6d5f] flex items-center gap-1.5">
+                <ImageIcon className="w-4 h-4 text-[#a8824b]" />
+                Избрани ({selectedFiles.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  previews.forEach((u) => URL.revokeObjectURL(u));
+                  setSelectedFiles([]);
+                  setPreviews([]);
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                }}
+                className="text-xs text-[#a34444] hover:underline"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={src}
-                  alt={`Избрана снимка ${index + 1}`}
-                  className="w-full h-full object-cover"
-                />
-              </div>
-            ))}
-          </div>
+                Откажи
+              </button>
+            </div>
 
-          {/* Upload Button */}
-          <div className="mt-6 flex flex-col sm:flex-row items-center gap-3">
+            <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-48 overflow-y-auto p-1 bg-[#faf8f5] rounded-2xl border border-[#ede5d8]">
+              {previews.map((src, i) => (
+                <div
+                  key={i}
+                  className="aspect-square rounded-xl overflow-hidden bg-[#eee] border border-[#e4dcd0]"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={src} alt="Преглед" className="w-full h-full object-cover" />
+                </div>
+              ))}
+            </div>
+
+            {/* Confirm Upload Button */}
             <button
+              type="button"
               onClick={handleUpload}
               disabled={isUploading}
-              className="w-full sm:w-auto flex-1 flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-amber-500 to-rose-500 text-white hover:brightness-110 shadow-lg shadow-rose-500/25 transition disabled:opacity-50 disabled:cursor-not-allowed"
+              className="mt-4 w-full py-3.5 rounded-2xl bg-[#a8824b] hover:bg-[#967440] text-white font-medium text-sm transition shadow-sm flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
             >
               {isUploading ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Качване на снимките ({selectedFiles.length})...</span>
+                  <span>Качване...</span>
                 </>
               ) : (
                 <>
-                  <UploadCloud className="w-4 h-4" />
+                  <Check className="w-4 h-4" />
                   <span>Качи {selectedFiles.length} {selectedFiles.length === 1 ? "снимка" : "снимки"} в галерията</span>
                 </>
               )}
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Status Messages */}
-      {uploadStatus.type === "success" && (
-        <div className="mt-6 p-4 rounded-2xl bg-emerald-950/60 border border-emerald-500/30 text-emerald-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0" />
-            <p className="text-sm font-medium">{uploadStatus.message}</p>
+        {/* Success / Error Message */}
+        {message.type === "success" && (
+          <div className="mt-5 p-4 rounded-2xl bg-[#eef7ee] border border-[#cbe5cb] text-[#2d5a2d] text-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+            <span>✓ {message.text}</span>
+            <button
+              onClick={onGoToGallery}
+              className="px-4 py-2 rounded-xl bg-[#2d5a2d] text-white text-xs font-semibold hover:bg-[#234823] transition flex items-center gap-1.5 cursor-pointer shrink-0"
+            >
+              <span>Към Галерията</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
           </div>
-          <button
-            onClick={onGoToGallery}
-            className="flex items-center gap-1.5 text-xs font-semibold px-3.5 py-2 rounded-xl bg-emerald-500 text-slate-950 hover:bg-emerald-400 transition shrink-0"
-          >
-            <span>Към Галерията</span>
-            <ArrowRight className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      )}
+        )}
 
-      {uploadStatus.type === "error" && (
-        <div className="mt-6 p-4 rounded-2xl bg-rose-950/60 border border-rose-500/30 text-rose-300 flex items-center gap-3">
-          <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
-          <p className="text-sm">{uploadStatus.message}</p>
-        </div>
-      )}
+        {message.type === "error" && (
+          <div className="mt-5 p-4 rounded-2xl bg-[#fdf0f0] border border-[#f5caca] text-[#8a3333] text-sm">
+            {message.text}
+          </div>
+        )}
 
-      {/* Permanent Storage Notice */}
-      <div className="mt-8 p-4 rounded-2xl bg-slate-900/40 border border-slate-800 text-xs text-slate-400 flex items-center gap-3">
-        <span className="text-base">🔒</span>
-        <span>
-          <strong>Бележка за сигурност:</strong> Веднъж качени, снимките се пазят в общия албум за
-          всички гости и не могат да бъдат изтривани от посетителите на сайта. Всеки може да ги
-          разглежда и сваля.
-        </span>
+        {/* Safe Album Note */}
+        <p className="text-[12px] text-[#9c8e80] mt-6 bg-[#faf8f5] p-3 rounded-2xl border border-[#ede5d8]">
+          🔒 <strong>Сигурност:</strong> Всички снимки се съхраняват в общия сватбен албум и не
+          могат да бъдат изтривани от посетители.
+        </p>
       </div>
-    </section>
+    </div>
   );
 }
