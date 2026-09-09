@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import Image from "next/image";
-import { Download, ChevronLeft, ChevronRight, X, Loader2, RefreshCw, Check, Info, ArrowLeftRight } from "lucide-react";
+import { Download, ChevronLeft, ChevronRight, X, Loader2, RefreshCw, Check, ArrowLeftRight } from "lucide-react";
 
 export interface PhotoItem {
   url: string;
@@ -32,6 +32,18 @@ export default function GalleryView({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [showSaveTip, setShowSaveTip] = useState(false);
+
+  // Lock background scroll when modal is open so the gallery page behind does not move
+  useEffect(() => {
+    if (selectedIndex !== null) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [selectedIndex]);
 
   // Keyboard navigation
   const handleKeyDown = useCallback(
@@ -67,8 +79,8 @@ export default function GalleryView({
     const deltaX = e.changedTouches[0].clientX - touchStartX.current;
     const deltaY = e.changedTouches[0].clientY - touchStartY.current;
 
-    // Swipe left/right
-    if (Math.abs(deltaX) > 40 && Math.abs(deltaX) > Math.abs(deltaY) * 1.2) {
+    // Swipe left/right threshold
+    if (Math.abs(deltaX) > 35 && Math.abs(deltaX) > Math.abs(deltaY)) {
       if (deltaX < 0) {
         setSelectedIndex((prev) =>
           prev !== null && prev < photos.length - 1 ? prev + 1 : 0
@@ -94,7 +106,7 @@ export default function GalleryView({
       const blob = await res.blob();
       const file = new File([blob], filename, { type: blob.type || "image/jpeg" });
 
-      // 1. Direct download (Immediately saves to Android Gallery / Downloads folder & Desktop)
+      // 1. Direct file download (Saves straight to Android Gallery/Downloads and Desktop)
       const objectUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -118,11 +130,11 @@ export default function GalleryView({
       setTimeout(() => {
         setDownloadSuccess(false);
         setShowSaveTip(false);
-      }, 4000);
+      }, 3500);
     } catch (err: unknown) {
       if ((err as Error)?.name !== "AbortError") {
         setShowSaveTip(true);
-        setTimeout(() => setShowSaveTip(false), 4000);
+        setTimeout(() => setShowSaveTip(false), 3500);
       }
     } finally {
       setIsDownloading(false);
@@ -172,7 +184,7 @@ export default function GalleryView({
         </div>
       )}
 
-      {/* Photos Grid - 4:5 aspect ratio so portrait wedding photos are not severely cropped */}
+      {/* Photos Grid - 4:5 aspect ratio so portrait photos are not cropped */}
       {photos.length > 0 && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
@@ -213,27 +225,27 @@ export default function GalleryView({
         </>
       )}
 
-      {/* FULLSCREEN LIGHTBOX - LARGE UNCROPPED PHOTOS WITH SWIPE & SCROLL */}
+      {/* FULLSCREEN LIGHTBOX - STRICTLY BOUNDED & ALWAYS CENTERED (CANNOT SCROLL INTO DARKNESS) */}
       {selectedIndex !== null && currentPhoto && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 bg-black/95 overflow-y-auto overscroll-contain"
+          className="fixed inset-0 z-50 h-[100dvh] max-h-[100dvh] w-screen overflow-hidden bg-black/95 flex flex-col justify-between select-none"
         >
-          {/* FIXED TOP BAR: ALWAYS VISIBLE AND PINNED AT TOP RIGHT */}
-          <div className="fixed top-0 left-0 right-0 z-50 px-3 py-2.5 sm:px-6 sm:py-3 flex items-center justify-between bg-black/85 backdrop-blur-md border-b border-white/10">
+          {/* TOP BAR: FIXED & PINNED AT TOP */}
+          <header className="shrink-0 h-14 w-full px-3 sm:px-6 flex items-center justify-between bg-black/85 backdrop-blur-md border-b border-white/10 z-30">
             {/* Left: Counter */}
             <div className="text-xs sm:text-sm text-white/90 bg-white/15 px-3 py-1 rounded-full font-medium">
               {selectedIndex + 1} / {photos.length}
             </div>
 
-            {/* Right: PRIMARY DOWNLOAD BUTTON + CLOSE */}
+            {/* Right: DOWNLOAD BUTTON + CLOSE */}
             <div className="flex items-center gap-2">
               <button
                 onClick={() => handleSaveToPhotos(currentPhoto)}
                 disabled={isDownloading}
                 title="Свали директно в Снимки на телефона"
-                className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl bg-[#dfba73] hover:bg-[#c9a35e] text-[#2d2621] font-semibold text-xs sm:text-sm shadow-lg transition transform active:scale-95 cursor-pointer disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-[#dfba73] hover:bg-[#c9a35e] text-[#2d2621] font-semibold text-xs sm:text-sm shadow-lg transition transform active:scale-95 cursor-pointer disabled:opacity-50"
               >
                 {isDownloading ? (
                   <>
@@ -255,37 +267,31 @@ export default function GalleryView({
 
               <button
                 onClick={() => setSelectedIndex(null)}
-                className="p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
+                className="p-1.5 sm:p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
                 title="Затвори"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
-          </div>
+          </header>
 
           {/* IPHONE & ANDROID HINT POPUP */}
           {showSaveTip && (
-            <div className="fixed top-16 left-1/2 -translate-x-1/2 z-50 max-w-[92vw] sm:max-w-md bg-[#dfba73] text-[#2d2621] p-3.5 rounded-2xl shadow-2xl border border-white/30 text-xs text-center animate-fade-in">
-              <p className="font-semibold text-sm mb-1 flex items-center justify-center gap-1.5">
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 max-w-[92vw] sm:max-w-md bg-[#dfba73] text-[#2d2621] p-3 rounded-2xl shadow-2xl border border-white/30 text-xs text-center animate-fade-in">
+              <p className="font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5">
                 <Check className="w-4 h-4 text-[#2d5a2d]" />
-                <span>Снимката е свалена на телефона!</span>
-              </p>
-              <p>
-                <strong>Android:</strong> Снимката е в папка &bdquo;Свалени&ldquo; (Downloads) в Галерията!
-              </p>
-              <p className="mt-1 text-[11px] opacity-90">
-                <strong>iPhone:</strong> Изберете &bdquo;Запази изображението&ldquo; (Save Image) или задръжте пръст върху снимката.
+                <span>Снимката е запазена в галерията на телефона!</span>
               </p>
             </div>
           )}
 
-          {/* MAIN PHOTO CONTAINER: LARGE UNCROPPED DISPLAY */}
+          {/* MAIN PHOTO: ALWAYS CENTERED, FULLY VISIBLE, ZERO BLACK VOID */}
           <div
-            className="min-h-[100dvh] w-full pt-16 pb-28 px-1 sm:px-4 flex flex-col items-center justify-center"
+            className="relative flex-1 min-h-0 w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden"
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
-            {/* Desktop Navigation Arrows */}
+            {/* Desktop Left Button */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -293,12 +299,13 @@ export default function GalleryView({
                   prev !== null && prev > 0 ? prev - 1 : photos.length - 1
                 );
               }}
-              className="hidden md:flex fixed left-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
+              className="hidden md:flex absolute left-4 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
               title="Предишна снимка"
             >
               <ChevronLeft className="w-6 h-6" />
             </button>
 
+            {/* Desktop Right Button */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -306,14 +313,14 @@ export default function GalleryView({
                   prev !== null && prev < photos.length - 1 ? prev + 1 : 0
                 );
               }}
-              className="hidden md:flex fixed right-4 top-1/2 -translate-y-1/2 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
+              className="hidden md:flex absolute right-4 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
               title="Следваща снимка"
             >
               <ChevronRight className="w-6 h-6" />
             </button>
 
-            {/* The Photo: Large, uncropped, filling the screen */}
-            <div className="relative w-full max-w-5xl flex flex-col items-center justify-center my-auto py-2">
+            {/* The Image: Perfect 100% fit, zero cut off, zero scroll away */}
+            <div className="relative w-full h-full flex items-center justify-center">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={currentPhoto.url}
@@ -322,42 +329,30 @@ export default function GalleryView({
                   WebkitTouchCallout: "default",
                   userSelect: "auto",
                 }}
-                className="w-full h-auto max-h-[88vh] sm:max-h-[85vh] object-contain rounded-xl shadow-2xl pointer-events-auto"
+                className="max-h-full max-w-full w-auto h-auto object-contain rounded-xl shadow-2xl pointer-events-auto"
               />
-
-              {/* CLEAR PROMINENT SWIPE HINT BADGE (REQUESTED BY USER) */}
-              <div className="mt-3 inline-flex items-center justify-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-white/90 text-xs font-medium border border-white/10 shadow-sm text-center">
-                <ArrowLeftRight className="w-3.5 h-3.5 text-[#dfba73]" />
-                <span>Плъзнете с пръст ↔ за смяна на снимка (Wischen)</span>
-              </div>
-
-              {/* Tips for iPhone and Android */}
-              <div className="mt-2 flex items-center justify-center gap-1 text-[11px] text-white/50 text-center px-4">
-                <Info className="w-3.5 h-3.5 text-[#dfba73]" />
-                <span>
-                  Запазване: натиснете &bdquo;Свали в галерията&ldquo; или задръжте пръст върху снимката
-                </span>
-              </div>
             </div>
           </div>
 
-          {/* FIXED BOTTOM NAVIGATION BAR */}
-          <div className="fixed bottom-0 left-0 right-0 z-40 px-4 py-2 sm:py-2.5 flex items-center justify-between bg-black/85 backdrop-blur-md border-t border-white/10">
+          {/* FIXED BOTTOM BAR: CONTROLS & CLEAR SWIPE INSTRUCTION */}
+          <footer className="shrink-0 h-14 w-full px-4 flex items-center justify-between bg-black/85 backdrop-blur-md border-t border-white/10 z-30">
             <button
               onClick={() => {
                 setSelectedIndex((prev) =>
                   prev !== null && prev > 0 ? prev - 1 : photos.length - 1
                 );
               }}
-              className="flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Предишна</span>
             </button>
 
-            <span className="text-[11px] text-white/60">
-              Скрол надолу ↕ или плъзнете ↔
-            </span>
+            {/* PROMINENT SWIPE TEXT IN BOTTOM BAR */}
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white/90 text-[11px] sm:text-xs font-medium">
+              <ArrowLeftRight className="w-3.5 h-3.5 text-[#dfba73]" />
+              <span>Плъзнете с пръст ↔ (Wischen)</span>
+            </div>
 
             <button
               onClick={() => {
@@ -365,12 +360,12 @@ export default function GalleryView({
                   prev !== null && prev < photos.length - 1 ? prev + 1 : 0
                 );
               }}
-              className="flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
             >
               <span>Следваща</span>
               <ChevronRight className="w-4 h-4" />
             </button>
-          </div>
+          </footer>
         </div>
       )}
     </div>
