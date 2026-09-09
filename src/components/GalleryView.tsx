@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { Download, ChevronLeft, ChevronRight, X, Loader2, RefreshCw, Check, ArrowLeftRight } from "lucide-react";
 
@@ -32,18 +33,11 @@ export default function GalleryView({
   const [isDownloading, setIsDownloading] = useState(false);
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [showSaveTip, setShowSaveTip] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  // Lock background scroll when modal is open so the gallery page behind does not move
   useEffect(() => {
-    if (selectedIndex !== null) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => {
-      document.body.style.overflow = "";
-    };
-  }, [selectedIndex]);
+    setIsMounted(true);
+  }, []);
 
   // Keyboard navigation
   const handleKeyDown = useCallback(
@@ -65,7 +59,7 @@ export default function GalleryView({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  // Touch swipe detection on mobile
+  // Touch swipe detection
   const touchStartX = useRef<number | null>(null);
   const touchStartY = useRef<number | null>(null);
 
@@ -79,7 +73,6 @@ export default function GalleryView({
     const deltaX = e.changedTouches[0].clientX - touchStartX.current;
     const deltaY = e.changedTouches[0].clientY - touchStartY.current;
 
-    // Swipe left/right threshold
     if (Math.abs(deltaX) > 35 && Math.abs(deltaX) > Math.abs(deltaY)) {
       if (deltaX < 0) {
         setSelectedIndex((prev) =>
@@ -106,7 +99,7 @@ export default function GalleryView({
       const blob = await res.blob();
       const file = new File([blob], filename, { type: blob.type || "image/jpeg" });
 
-      // 1. Direct file download (Saves straight to Android Gallery/Downloads and Desktop)
+      // 1. Direct file download (Android Gallery Downloads folder & Desktop)
       const objectUrl = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = objectUrl;
@@ -184,7 +177,7 @@ export default function GalleryView({
         </div>
       )}
 
-      {/* Photos Grid - 4:5 aspect ratio so portrait photos are not cropped */}
+      {/* Photos Grid */}
       {photos.length > 0 && (
         <>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2.5 sm:gap-3.5">
@@ -225,149 +218,155 @@ export default function GalleryView({
         </>
       )}
 
-      {/* FULLSCREEN LIGHTBOX - STRICTLY BOUNDED & ALWAYS CENTERED (CANNOT SCROLL INTO DARKNESS) */}
-      {selectedIndex !== null && currentPhoto && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          className="fixed inset-0 z-50 h-[100dvh] max-h-[100dvh] w-screen overflow-hidden bg-black/95 flex flex-col justify-between select-none"
-        >
-          {/* TOP BAR: FIXED & PINNED AT TOP */}
-          <header className="shrink-0 h-14 w-full px-3 sm:px-6 flex items-center justify-between bg-black/85 backdrop-blur-md border-b border-white/10 z-30">
-            {/* Left: Counter */}
-            <div className="text-xs sm:text-sm text-white/90 bg-white/15 px-3 py-1 rounded-full font-medium">
-              {selectedIndex + 1} / {photos.length}
-            </div>
-
-            {/* Right: DOWNLOAD BUTTON + CLOSE */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => handleSaveToPhotos(currentPhoto)}
-                disabled={isDownloading}
-                title="Свали директно в Снимки на телефона"
-                className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-[#dfba73] hover:bg-[#c9a35e] text-[#2d2621] font-semibold text-xs sm:text-sm shadow-lg transition transform active:scale-95 cursor-pointer disabled:opacity-50"
-              >
-                {isDownloading ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Сваляне...</span>
-                  </>
-                ) : downloadSuccess ? (
-                  <>
-                    <Check className="w-4 h-4 text-[#2d5a2d]" />
-                    <span>Свалено в Галерията!</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" />
-                    <span>Свали в галерията</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                onClick={() => setSelectedIndex(null)}
-                className="p-1.5 sm:p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
-                title="Затвори"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-          </header>
-
-          {/* IPHONE & ANDROID HINT POPUP */}
-          {showSaveTip && (
-            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 max-w-[92vw] sm:max-w-md bg-[#dfba73] text-[#2d2621] p-3 rounded-2xl shadow-2xl border border-white/30 text-xs text-center animate-fade-in">
-              <p className="font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5">
-                <Check className="w-4 h-4 text-[#2d5a2d]" />
-                <span>Снимката е запазена в галерията на телефона!</span>
-              </p>
-            </div>
-          )}
-
-          {/* MAIN PHOTO: ALWAYS CENTERED, FULLY VISIBLE, ZERO BLACK VOID */}
+      {/* FULLSCREEN LIGHTBOX - RENDERED IN REACT PORTAL DIRECTLY ON DOCUMENT.BODY */}
+      {/* THIS GUARANTEES INSTANT ZERO-LAG OPENING RIGHT WHERE THE USER IS SCROLLED */}
+      {isMounted &&
+        selectedIndex !== null &&
+        currentPhoto &&
+        createPortal(
           <div
-            className="relative flex-1 min-h-0 w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden"
-            onTouchStart={handleTouchStart}
-            onTouchEnd={handleTouchEnd}
+            role="dialog"
+            aria-modal="true"
+            className="fixed inset-0 z-[9999] h-[100dvh] w-screen overflow-hidden bg-black/95 flex flex-col justify-between select-none"
+            style={{ margin: 0, padding: 0 }}
           >
-            {/* Desktop Left Button */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedIndex((prev) =>
-                  prev !== null && prev > 0 ? prev - 1 : photos.length - 1
-                );
-              }}
-              className="hidden md:flex absolute left-4 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
-              title="Предишна снимка"
-            >
-              <ChevronLeft className="w-6 h-6" />
-            </button>
+            {/* TOP BAR: FIXED & PINNED AT TOP */}
+            <header className="shrink-0 h-14 w-full px-3 sm:px-6 flex items-center justify-between bg-black/85 backdrop-blur-md border-b border-white/10 z-30">
+              {/* Left: Counter */}
+              <div className="text-xs sm:text-sm text-white/90 bg-white/15 px-3 py-1 rounded-full font-medium">
+                {selectedIndex + 1} / {photos.length}
+              </div>
 
-            {/* Desktop Right Button */}
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedIndex((prev) =>
-                  prev !== null && prev < photos.length - 1 ? prev + 1 : 0
-                );
-              }}
-              className="hidden md:flex absolute right-4 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
-              title="Следваща снимка"
-            >
-              <ChevronRight className="w-6 h-6" />
-            </button>
+              {/* Right: DOWNLOAD BUTTON + CLOSE */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleSaveToPhotos(currentPhoto)}
+                  disabled={isDownloading}
+                  title="Свали директно в Снимки на телефона"
+                  className="flex items-center gap-1.5 px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-xl bg-[#dfba73] hover:bg-[#c9a35e] text-[#2d2621] font-semibold text-xs sm:text-sm shadow-lg transition transform active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  {isDownloading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Сваляне...</span>
+                    </>
+                  ) : downloadSuccess ? (
+                    <>
+                      <Check className="w-4 h-4 text-[#2d5a2d]" />
+                      <span>Свалено в Галерията!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4" />
+                      <span>Свали в галерията</span>
+                    </>
+                  )}
+                </button>
 
-            {/* The Image: Perfect 100% fit, zero cut off, zero scroll away */}
-            <div className="relative w-full h-full flex items-center justify-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={currentPhoto.url}
-                alt={`Сватбена снимка ${selectedIndex + 1}`}
-                style={{
-                  WebkitTouchCallout: "default",
-                  userSelect: "auto",
+                <button
+                  onClick={() => setSelectedIndex(null)}
+                  className="p-1.5 sm:p-2 rounded-xl bg-white/15 hover:bg-white/25 text-white transition cursor-pointer"
+                  title="Затвори"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </header>
+
+            {/* IPHONE & ANDROID HINT POPUP */}
+            {showSaveTip && (
+              <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 max-w-[92vw] sm:max-w-md bg-[#dfba73] text-[#2d2621] p-3 rounded-2xl shadow-2xl border border-white/30 text-xs text-center animate-fade-in">
+                <p className="font-semibold text-xs sm:text-sm flex items-center justify-center gap-1.5">
+                  <Check className="w-4 h-4 text-[#2d5a2d]" />
+                  <span>Снимката е запазена в телефона!</span>
+                </p>
+              </div>
+            )}
+
+            {/* MAIN PHOTO: ALWAYS CENTERED, FULLY VISIBLE, ZERO BLACK VOID */}
+            <div
+              className="relative flex-1 min-h-0 w-full flex items-center justify-center p-2 sm:p-4 overflow-hidden"
+              onTouchStart={handleTouchStart}
+              onTouchEnd={handleTouchEnd}
+            >
+              {/* Desktop Left Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedIndex((prev) =>
+                    prev !== null && prev > 0 ? prev - 1 : photos.length - 1
+                  );
                 }}
-                className="max-h-full max-w-full w-auto h-auto object-contain rounded-xl shadow-2xl pointer-events-auto"
-              />
+                className="hidden md:flex absolute left-4 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
+                title="Предишна снимка"
+              >
+                <ChevronLeft className="w-6 h-6" />
+              </button>
+
+              {/* Desktop Right Button */}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSelectedIndex((prev) =>
+                    prev !== null && prev < photos.length - 1 ? prev + 1 : 0
+                  );
+                }}
+                className="hidden md:flex absolute right-4 z-30 p-3 rounded-full bg-black/60 hover:bg-black/90 text-white border border-white/20 transition cursor-pointer"
+                title="Следваща снимка"
+              >
+                <ChevronRight className="w-6 h-6" />
+              </button>
+
+              {/* The Image: Perfect 100% fit, zero cut off, zero scroll away */}
+              <div className="relative w-full h-full flex items-center justify-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={currentPhoto.url}
+                  alt={`Сватбена снимка ${selectedIndex + 1}`}
+                  style={{
+                    WebkitTouchCallout: "default",
+                    userSelect: "auto",
+                  }}
+                  className="max-h-full max-w-full w-auto h-auto object-contain rounded-xl shadow-2xl pointer-events-auto"
+                />
+              </div>
             </div>
-          </div>
 
-          {/* FIXED BOTTOM BAR: CONTROLS & CLEAR SWIPE INSTRUCTION */}
-          <footer className="shrink-0 h-14 w-full px-4 flex items-center justify-between bg-black/85 backdrop-blur-md border-t border-white/10 z-30">
-            <button
-              onClick={() => {
-                setSelectedIndex((prev) =>
-                  prev !== null && prev > 0 ? prev - 1 : photos.length - 1
-                );
-              }}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              <span>Предишна</span>
-            </button>
+            {/* FIXED BOTTOM BAR: CONTROLS & CLEAR SWIPE INSTRUCTION */}
+            <footer className="shrink-0 h-14 w-full px-4 flex items-center justify-between bg-black/85 backdrop-blur-md border-t border-white/10 z-30">
+              <button
+                onClick={() => {
+                  setSelectedIndex((prev) =>
+                    prev !== null && prev > 0 ? prev - 1 : photos.length - 1
+                  );
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                <span>Предишна</span>
+              </button>
 
-            {/* PROMINENT SWIPE TEXT IN BOTTOM BAR */}
-            <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white/90 text-[11px] sm:text-xs font-medium">
-              <ArrowLeftRight className="w-3.5 h-3.5 text-[#dfba73]" />
-              <span>Плъзнете с пръст ↔ (Wischen)</span>
-            </div>
+              {/* PROMINENT SWIPE TEXT IN BOTTOM BAR */}
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-white/90 text-[11px] sm:text-xs font-medium">
+                <ArrowLeftRight className="w-3.5 h-3.5 text-[#dfba73]" />
+                <span>Плъзнете с пръст ↔ (Wischen)</span>
+              </div>
 
-            <button
-              onClick={() => {
-                setSelectedIndex((prev) =>
-                  prev !== null && prev < photos.length - 1 ? prev + 1 : 0
-                );
-              }}
-              className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
-            >
-              <span>Следваща</span>
-              <ChevronRight className="w-4 h-4" />
-            </button>
-          </footer>
-        </div>
-      )}
+              <button
+                onClick={() => {
+                  setSelectedIndex((prev) =>
+                    prev !== null && prev < photos.length - 1 ? prev + 1 : 0
+                  );
+                }}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-medium cursor-pointer"
+              >
+                <span>Следваща</span>
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </footer>
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
